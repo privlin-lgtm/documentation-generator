@@ -26,6 +26,11 @@ program
   .option("--readme-only", "only generate README.md", false)
   .option("--api-only", "only generate API docs", false)
   .action(async (projectPath: string, opts) => {
+    if (opts.apiOnly && opts.readmeOnly) {
+      console.error(pc.red("--readme-only and --api-only are mutually exclusive; pass at most one."));
+      process.exitCode = 1;
+      return;
+    }
     try {
       console.log(pc.cyan(`Scanning ${path.resolve(projectPath)} (${opts.lang})...`));
       const structure = await scanProject(projectPath, opts.lang);

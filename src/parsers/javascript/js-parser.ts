@@ -9,6 +9,7 @@ import type {
   ModuleInfo,
   ParamInfo,
 } from "../../types.js";
+import { emptyModule } from "../shared.js";
 
 // Babel 8's parser enables most modern syntax (class fields, optional chaining,
 // nullish coalescing, dynamic import, top-level await, etc.) without a plugin.
@@ -99,22 +100,36 @@ function paramFromNode(node: t.Node): ParamInfo {
   return { name: code(node), annotation: null, default: null };
 }
 
-/** Fills in param/return types from JSDoc @param and @returns tags when present. */
-function applyJsDocTypes(docstring: string | null, params: ParamInfo[]): string | null {
-  if (!docstring) return null;
-  let returns: string | null = null;
+/**
+ * Reads JSDoc `@param`/`@returns` tags and applies their types to `params`.
+ * Pure: returns a new params array (with matching entries' `annotation`
+ * filled in) plus the inferred return type, rather than mutating the input.
+ */
+function applyJsDocTypes(
+  docstring: string | null,
+  params: ParamInfo[]
+): { params: ParamInfo[]; returnType: string | null } {
+  if (!docstring) return { params, returnType: null };
+
+  const typesByName = new Map<string, string>();
+  let returnType: string | null = null;
   for (const line of docstring.split("\n")) {
     const paramMatch = line.match(/@param\s+\{([^}]+)\}\s+\[?([\w.]+)/);
     if (paramMatch) {
       const [, type, name] = paramMatch;
-      const param = params.find((p) => p.name === name || p.name === `...${name}`);
-      if (param) param.annotation = type;
+      typesByName.set(name, type);
       continue;
     }
     const returnMatch = line.match(/@returns?\s+\{([^}]+)\}/);
-    if (returnMatch) returns = returnMatch[1];
+    if (returnMatch) returnType = returnMatch[1];
   }
-  return returns;
+  if (typesByName.size === 0) return { params, returnType };
+
+  const updatedParams = params.map((p) => {
+    const type = typesByName.get(p.name) ?? typesByName.get(p.name.replace(/^\.\.\./, ""));
+    return type ? { ...p, annotation: type } : p;
+  });
+  return { params: updatedParams, returnType };
 }
 
 interface FunctionLike {
@@ -130,9 +145,8 @@ function buildFunctionInfo(
   decorators: string[],
   ...jsDocHosts: Array<t.Node | null | undefined>
 ): FunctionInfo {
-  const params = fnNode.params.map(paramFromNode);
   const docstring = getJsDoc(...jsDocHosts);
-  const returnType = applyJsDocTypes(docstring, params);
+  const { params, returnType } = applyJsDocTypes(docstring, fnNode.params.map(paramFromNode));
 
   return {
     name,
@@ -240,16 +254,18 @@ export const javascriptParser: LanguageParser = {
   language: "javascript",
   filePatterns: ["**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs"],
   async parseFiles(filePaths: string[]): Promise<ModuleInfo[]> {
-    const modules: ModuleInfo[] = [];
-    for (const filePath of filePaths) {
-      try {
-        const source = await readFile(filePath, "utf8");
-        modules.push(parseSource(source, filePath));
-      } catch (err) {
-        console.warn(`Skipping ${filePath}: ${(err as Error).message}`);
-        modules.push({ filePath, docstring: null, imports: [], classes: [], functions: [] });
-      }
-    }
-    return modules;
+    // Reads run in parallel; Promise.all preserves input order regardless of
+    // completion order, so output order still matches filePaths.
+    return Promise.all(
+      filePaths.map(async (filePath) => {
+        try {
+          const source = await readFile(filePath, "utf8");
+          return parseSource(source, filePath);
+        } catch (err) {
+          console.warn(`Skipping ${filePath}: ${(err as Error).message}`);
+          return emptyModule(filePath);
+        }
+      })
+    );
   },
 };

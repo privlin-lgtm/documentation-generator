@@ -8,3 +8,8 @@ export const availableParsers: LanguageParser[] = [pythonParser, javascriptParse
 export function getParser(language: string): LanguageParser | undefined {
   return availableParsers.find((p) => p.language === language);
 }
+
+/** Languages with a registered parser, for error messages and CLI help text. */
+export function supportedLanguages(): string[] {
+  return availableParsers.map((p) => p.language);
+}

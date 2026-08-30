@@ -32,6 +32,11 @@ def collect_params(fn):
     defaults = [None] * (len(positional) - len(args.defaults)) + list(args.defaults)
     params = [param_info(a, d) for a, d in zip(positional, defaults)]
 
+    if args.posonlyargs:
+        # Bare "/" marks the end of positional-only params (PEP 570); insert it
+        # right after the last positional-only entry so the signature round-trips.
+        params.insert(len(args.posonlyargs), {"name": "/", "annotation": None, "default": None})
+
     if args.vararg:
         params.append({"name": "*" + args.vararg.arg, "annotation": unparse(args.vararg.annotation), "default": None})
     elif args.kwonlyargs:
@@ -114,7 +119,10 @@ def main():
     for file_path in file_paths:
         try:
             results.append(parse_file(file_path))
-        except (SyntaxError, UnicodeDecodeError, OSError) as exc:
+        except Exception as exc:
+            # Catch-all: a single malformed/unusual file (bad encoding, a stdlib
+            # `ast` edge case, etc.) must not abort the whole batch and lose
+            # every other file's results.
             results.append({
                 "filePath": file_path,
                 "error": str(exc),

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { findSourceFiles } from "./scanner.js";
-import { getParser } from "../parsers/registry.js";
+import { getParser, supportedLanguages } from "../parsers/registry.js";
 import type { ProjectStructure } from "../types.js";
 
 /** Scans `rootDir` for source files in `language` and parses them into a ProjectStructure. */
@@ -11,7 +11,7 @@ export async function scanProject(
   const parser = getParser(language);
   if (!parser) {
     throw new Error(
-      `No parser registered for language "${language}". Supported: python, javascript`
+      `No parser registered for language "${language}". Supported: ${supportedLanguages().join(", ")}`
     );
   }
 

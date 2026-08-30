@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import type { LanguageParser, ModuleInfo } from "../../types.js";
+import { emptyModule } from "../shared.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -70,13 +71,7 @@ export const pythonParser: LanguageParser = {
     return raw.map((mod) => {
       if (mod.error) {
         console.warn(`Skipping ${mod.filePath}: ${mod.error}`);
-        return {
-          filePath: mod.filePath,
-          docstring: null,
-          imports: [],
-          classes: [],
-          functions: [],
-        };
+        return emptyModule(mod.filePath);
       }
       return {
         filePath: mod.filePath,
