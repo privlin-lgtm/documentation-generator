@@ -44,22 +44,50 @@ function getJsDoc(...nodes: Array<t.Node | null | undefined>): string | null {
   return null;
 }
 
-/** A file-level JSDoc block is only recognized when it precedes the first import/require. */
+/** True when the statement itself is a documented declaration that should own its leading JSDoc. */
+function declarationOwnsJsDoc(stmt: t.Statement): boolean {
+  const inner = unwrapExport(stmt);
+  if (!inner) return false;
+  if (t.isFunctionDeclaration(inner) || t.isClassDeclaration(inner)) return true;
+  return (
+    t.isVariableDeclaration(inner) &&
+    inner.declarations.some(
+      (d) =>
+        !!d.init && (t.isArrowFunctionExpression(d.init) || t.isFunctionExpression(d.init))
+    )
+  );
+}
+
+function isImportLike(stmt: t.Statement): boolean {
+  return (
+    t.isImportDeclaration(stmt) ||
+    (t.isVariableDeclaration(stmt) &&
+      stmt.declarations.some(
+        (d) => t.isCallExpression(d.init) && t.isIdentifier(d.init.callee, { name: "require" })
+      ))
+  );
+}
+
+/**
+ * File-level JSDoc: a header before the first import/require, a header above a
+ * non-declaration statement (e.g. a file with no imports), or the first of
+ * several JSDocs when the first statement is a class/function that owns the last one.
+ */
 function extractModuleDocstring(program: t.Program): string | null {
   const first = program.body[0];
-  if (!first) return null;
+  if (!first) {
+    const comments = program.innerComments ?? program.leadingComments;
+    const block = comments?.find(isJsDocBlock);
+    return block ? cleanJsDoc(block.value) || null : null;
+  }
 
-  const isImportLike =
-    t.isImportDeclaration(first) ||
-    (t.isVariableDeclaration(first) &&
-      first.declarations.some(
-        (d) => t.isCallExpression(d.init) && t.isIdentifier(d.init.callee, { name: "require" })
-      ));
-  if (!isImportLike) return null;
+  const jsDocs = (first.leadingComments ?? []).filter(isJsDocBlock);
+  if (jsDocs.length === 0) return null;
 
-  const comments = first.leadingComments;
-  const block = comments?.find(isJsDocBlock);
-  return block ? cleanJsDoc(block.value) || null : null;
+  if (isImportLike(first) || !declarationOwnsJsDoc(first) || jsDocs.length > 1) {
+    return cleanJsDoc(jsDocs[0].value) || null;
+  }
+  return null;
 }
 
 function collectImports(program: t.Program): string[] {
