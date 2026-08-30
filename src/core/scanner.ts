@@ -15,10 +15,7 @@ const DEFAULT_IGNORES = [
 ];
 
 /** Finds files matching `patterns` under `rootDir`, respecting the project's .gitignore. */
-export async function findSourceFiles(
-  rootDir: string,
-  patterns: string[]
-): Promise<string[]> {
+export async function findSourceFiles(rootDir: string, patterns: string[]): Promise<string[]> {
   const ig = ignore();
   try {
     const gitignore = await readFile(path.join(rootDir, ".gitignore"), "utf8");

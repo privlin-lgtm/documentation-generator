@@ -41,60 +41,57 @@ describe.skipIf(!pythonAvailable())("pythonParser", () => {
 
   it("extracts modules, types, positional-only params, and skips a bad file", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    await withTempDir(
-      { "widget.py": SAMPLE_PY, "broken.py": "def (" },
-      async (dir, paths) => {
-        const [widget, broken] = await pythonParser.parseFiles(
-          [paths["widget.py"], paths["broken.py"]],
-          dir
-        );
+    await withTempDir({ "widget.py": SAMPLE_PY, "broken.py": "def (" }, async (dir, paths) => {
+      const [widget, broken] = await pythonParser.parseFiles(
+        [paths["widget.py"], paths["broken.py"]],
+        dir
+      );
 
-        expect(widget.filePath).toBe(paths["widget.py"]);
-        expect(widget.docstring).toBe("Sample math helpers.");
-        expect(widget.imports).toEqual(expect.arrayContaining(["typing.Optional", "os"]));
+      expect(widget.filePath).toBe(paths["widget.py"]);
+      expect(widget.docstring).toBe("Sample math helpers.");
+      expect(widget.imports).toEqual(expect.arrayContaining(["typing.Optional", "os"]));
 
-        const add = widget.functions.find((f) => f.name === "add");
-        expect(add).toMatchObject({
-          returnType: "int",
-          isAsync: false,
-          docstring: "Adds two numbers.",
-          params: [
-            { name: "a", annotation: "int", default: null },
-            { name: "b", annotation: "int", default: "0" },
-          ],
-        });
+      const add = widget.functions.find((f) => f.name === "add");
+      expect(add).toMatchObject({
+        returnType: "int",
+        isAsync: false,
+        docstring: "Adds two numbers.",
+        params: [
+          { name: "a", annotation: "int", default: null },
+          { name: "b", annotation: "int", default: "0" },
+        ],
+      });
 
-        const clamp = widget.functions.find((f) => f.name === "clamp");
-        expect(clamp?.params.map((p) => p.name)).toEqual(["value", "/", "low", "*", "high"]);
-        expect(clamp?.params.find((p) => p.name === "value")).toMatchObject({
-          annotation: "int",
-          default: null,
-        });
-        expect(clamp?.params.find((p) => p.name === "high")).toMatchObject({
-          annotation: "int",
-          default: "100",
-        });
+      const clamp = widget.functions.find((f) => f.name === "clamp");
+      expect(clamp?.params.map((p) => p.name)).toEqual(["value", "/", "low", "*", "high"]);
+      expect(clamp?.params.find((p) => p.name === "value")).toMatchObject({
+        annotation: "int",
+        default: null,
+      });
+      expect(clamp?.params.find((p) => p.name === "high")).toMatchObject({
+        annotation: "int",
+        default: "100",
+      });
 
-        expect(widget.classes).toHaveLength(1);
-        const widgetClass = widget.classes[0];
-        expect(widgetClass.name).toBe("Widget");
-        expect(widgetClass.docstring).toBe("A labeled box.");
-        expect(widgetClass.methods.map((m) => m.name)).toEqual(["__init__", "render"]);
-        expect(widgetClass.methods.find((m) => m.name === "render")).toMatchObject({
-          isAsync: true,
-          returnType: "str",
-          docstring: "Draw the widget.",
-        });
+      expect(widget.classes).toHaveLength(1);
+      const widgetClass = widget.classes[0];
+      expect(widgetClass.name).toBe("Widget");
+      expect(widgetClass.docstring).toBe("A labeled box.");
+      expect(widgetClass.methods.map((m) => m.name)).toEqual(["__init__", "render"]);
+      expect(widgetClass.methods.find((m) => m.name === "render")).toMatchObject({
+        isAsync: true,
+        returnType: "str",
+        docstring: "Draw the widget.",
+      });
 
-        expect(broken).toEqual({
-          filePath: paths["broken.py"],
-          docstring: null,
-          imports: [],
-          classes: [],
-          functions: [],
-        });
-      }
-    );
+      expect(broken).toEqual({
+        filePath: paths["broken.py"],
+        docstring: null,
+        imports: [],
+        classes: [],
+        functions: [],
+      });
+    });
   });
 
   it("uses a Python 3 executable that is actually on PATH", () => {

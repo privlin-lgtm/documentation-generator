@@ -61,9 +61,7 @@ async function runAstDump(filePaths: string[]): Promise<RawModule[]> {
 
     const timeout = setTimeout(() => {
       killChild();
-      settle(() =>
-        reject(new Error(`Python AST parser timed out after ${AST_DUMP_TIMEOUT_MS}ms`))
-      );
+      settle(() => reject(new Error(`Python AST parser timed out after ${AST_DUMP_TIMEOUT_MS}ms`)));
     }, AST_DUMP_TIMEOUT_MS);
 
     function settle(fn: () => void) {
@@ -85,9 +83,7 @@ async function runAstDump(filePaths: string[]): Promise<RawModule[]> {
       if (stdoutBytes > AST_DUMP_MAX_STDOUT_BYTES) {
         killChild();
         settle(() =>
-          reject(
-            new Error(`Python AST parser stdout exceeded ${AST_DUMP_MAX_STDOUT_BYTES} bytes`)
-          )
+          reject(new Error(`Python AST parser stdout exceeded ${AST_DUMP_MAX_STDOUT_BYTES} bytes`))
         );
         return;
       }
@@ -125,7 +121,9 @@ async function runAstDump(filePaths: string[]): Promise<RawModule[]> {
     } catch (err) {
       killChild();
       settle(() =>
-        reject(new Error(`Failed to send file list to Python AST parser: ${(err as Error).message}`))
+        reject(
+          new Error(`Failed to send file list to Python AST parser: ${(err as Error).message}`)
+        )
       );
     }
   });

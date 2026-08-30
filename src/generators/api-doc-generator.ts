@@ -11,7 +11,12 @@ function toModuleDottedName(rootDir: string, filePath: string): string {
   return rel.replace(SOURCE_EXTENSIONS, "").replace(/\//g, ".").replace(PACKAGE_ENTRY_STEM, "");
 }
 
-function renderFunction(fn: FunctionInfo, headingLevel: number, language: string, context: "function" | "method"): string {
+function renderFunction(
+  fn: FunctionInfo,
+  headingLevel: number,
+  language: string,
+  context: "function" | "method"
+): string {
   const heading = "#".repeat(headingLevel);
   const lines = [`${heading} \`${renderSignature(fn, language, context)}\``, ""];
   if (fn.decorators.length > 0) {
@@ -73,13 +78,23 @@ export interface ApiDocFile {
 
 /** Generates one Markdown file per module documenting its classes and functions. */
 export function generateApiDocs(structure: ProjectStructure): ApiDocFile[] {
+  // A mixed-language scan could otherwise produce the same dotted name twice
+  // (e.g. Python's utils.py and JS's utils.js both -> "utils.md"); namespace
+  // by language only when more than one is actually present, to keep
+  // single-language output filenames unchanged.
+  const languagesPresent = new Set(structure.modules.map((mod) => mod.language));
+  const namespaceByLanguage = languagesPresent.size > 1;
+
   return structure.modules
     .filter((mod) => mod.classes.length > 0 || mod.functions.length > 0)
     .map((mod) => {
-      const dottedName = toModuleDottedName(structure.rootDir, mod.filePath);
+      const dottedName = toModuleDottedName(structure.rootDir, mod.filePath) || "module";
+      const relativePath = namespaceByLanguage
+        ? `${mod.language}/${dottedName}.md`
+        : `${dottedName}.md`;
       return {
-        relativePath: `${dottedName || "module"}.md`,
-        content: renderModule(structure.rootDir, mod, structure.language),
+        relativePath,
+        content: renderModule(structure.rootDir, mod, mod.language),
       };
     });
 }

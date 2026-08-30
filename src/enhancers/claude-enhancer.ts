@@ -5,7 +5,7 @@ import type { ReadmeEnhancer } from "./enhancer.interface.js";
 const MODEL = "claude-sonnet-5";
 
 function summarizeStructureForPrompt(structure: ProjectStructure): string {
-  const parts: string[] = [];
+  const parts: string[] = [`Languages: ${structure.languages.join(", ")}`];
   for (const mod of structure.modules) {
     const classNames = mod.classes.map((c) => c.name);
     const fnNames = mod.functions.map((f) => f.name);

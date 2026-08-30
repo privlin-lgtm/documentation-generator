@@ -52,8 +52,7 @@ function declarationOwnsJsDoc(stmt: t.Statement): boolean {
   return (
     t.isVariableDeclaration(inner) &&
     inner.declarations.some(
-      (d) =>
-        !!d.init && (t.isArrowFunctionExpression(d.init) || t.isFunctionExpression(d.init))
+      (d) => !!d.init && (t.isArrowFunctionExpression(d.init) || t.isFunctionExpression(d.init))
     )
   );
 }
@@ -198,7 +197,9 @@ function buildClassInfo(node: t.ClassDeclaration, jsDocHost: t.Node | null | und
 
   for (const member of node.body.body) {
     if (!t.isClassMethod(member) && !t.isClassPrivateMethod(member)) continue;
-    const name = t.isClassPrivateMethod(member) ? `#${(member.key as t.PrivateName).id.name}` : classMethodName(member.key as t.ClassMethod["key"]);
+    const name = t.isClassPrivateMethod(member)
+      ? `#${(member.key as t.PrivateName).id.name}`
+      : classMethodName(member.key as t.ClassMethod["key"]);
     const decorators = (member.decorators ?? []).map((d) => code(d.expression));
     if (member.kind === "get") decorators.unshift("get");
     if (member.kind === "set") decorators.unshift("set");

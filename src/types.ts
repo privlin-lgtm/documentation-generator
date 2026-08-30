@@ -33,10 +33,17 @@ export interface ModuleInfo {
   functions: FunctionInfo[];
 }
 
+/** A parsed module tagged with the language whose parser produced it. Set by
+ * scanProject, not by individual parsers, so a single scan can merge output
+ * from multiple LanguageParsers (e.g. a repo with both Python and JS). */
+export interface ScannedModule extends ModuleInfo {
+  language: string;
+}
+
 export interface ProjectStructure {
   rootDir: string;
-  language: string;
-  modules: ModuleInfo[];
+  languages: string[];
+  modules: ScannedModule[];
 }
 
 export interface LanguageParser {
