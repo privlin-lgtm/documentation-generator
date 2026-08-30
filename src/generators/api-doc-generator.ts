@@ -2,14 +2,18 @@ import path from "node:path";
 import type { ClassInfo, FunctionInfo, ModuleInfo, ProjectStructure } from "../types.js";
 import { renderSignature } from "./signature.js";
 
+const SOURCE_EXTENSIONS = /\.(py|jsx?|mjs|cjs)$/;
+/** Files whose module acts as a package's public surface (Python's __init__.py, JS's index.js). */
+const PACKAGE_ENTRY_STEM = /\.(__init__|index)$/;
+
 function toModuleDottedName(rootDir: string, filePath: string): string {
   const rel = path.relative(rootDir, filePath).replace(/\\/g, "/");
-  return rel.replace(/\.py$/, "").replace(/\//g, ".").replace(/\.__init__$/, "");
+  return rel.replace(SOURCE_EXTENSIONS, "").replace(/\//g, ".").replace(PACKAGE_ENTRY_STEM, "");
 }
 
-function renderFunction(fn: FunctionInfo, headingLevel: number): string {
+function renderFunction(fn: FunctionInfo, headingLevel: number, language: string, context: "function" | "method"): string {
   const heading = "#".repeat(headingLevel);
-  const lines = [`${heading} \`${renderSignature(fn)}\``, ""];
+  const lines = [`${heading} \`${renderSignature(fn, language, context)}\``, ""];
   if (fn.decorators.length > 0) {
     lines.push(fn.decorators.map((d) => `\`@${d}\``).join(" "), "");
   }
@@ -17,19 +21,19 @@ function renderFunction(fn: FunctionInfo, headingLevel: number): string {
   return lines.join("\n");
 }
 
-function renderClass(cls: ClassInfo, headingLevel: number): string {
+function renderClass(cls: ClassInfo, headingLevel: number, language: string): string {
   const heading = "#".repeat(headingLevel);
   const bases = cls.bases.length > 0 ? `(${cls.bases.join(", ")})` : "";
   const lines = [`${heading} class \`${cls.name}${bases}\``, ""];
   lines.push(cls.docstring ? cls.docstring.trim() : "_No docstring provided._", "");
 
   for (const method of cls.methods) {
-    lines.push(renderFunction(method, headingLevel + 1));
+    lines.push(renderFunction(method, headingLevel + 1, language, "method"));
   }
   return lines.join("\n");
 }
 
-function renderModule(rootDir: string, mod: ModuleInfo): string {
+function renderModule(rootDir: string, mod: ModuleInfo, language: string): string {
   const dottedName = toModuleDottedName(rootDir, mod.filePath);
   const lines = [`# \`${dottedName}\``, ""];
   const relPath = path.relative(rootDir, mod.filePath).replace(/\\/g, "/");
@@ -47,14 +51,14 @@ function renderModule(rootDir: string, mod: ModuleInfo): string {
   if (mod.classes.length > 0) {
     lines.push("## Classes", "");
     for (const cls of mod.classes) {
-      lines.push(renderClass(cls, 3));
+      lines.push(renderClass(cls, 3, language));
     }
   }
 
   if (mod.functions.length > 0) {
     lines.push("## Functions", "");
     for (const fn of mod.functions) {
-      lines.push(renderFunction(fn, 3));
+      lines.push(renderFunction(fn, 3, language, "function"));
     }
   }
 
@@ -75,13 +79,17 @@ export function generateApiDocs(structure: ProjectStructure): ApiDocFile[] {
       const dottedName = toModuleDottedName(structure.rootDir, mod.filePath);
       return {
         relativePath: `${dottedName || "module"}.md`,
-        content: renderModule(structure.rootDir, mod),
+        content: renderModule(structure.rootDir, mod, structure.language),
       };
     });
 }
 
-/** Builds a Markdown index linking to each per-module API doc file. */
-export function generateApiIndex(files: ApiDocFile[]): string {
+/**
+ * Builds a Markdown index linking to each per-module API doc file. Per-module
+ * files are expected to live under a `modulesDir` (e.g. "modules") so that a
+ * source module named `index` can never collide with this index file itself.
+ */
+export function generateApiIndex(files: ApiDocFile[], modulesDir: string): string {
   const lines = ["# API Reference", ""];
   if (files.length === 0) {
     lines.push("_No documented modules were found._");
@@ -89,7 +97,7 @@ export function generateApiIndex(files: ApiDocFile[]): string {
   }
   for (const file of files.sort((a, b) => a.relativePath.localeCompare(b.relativePath))) {
     const name = file.relativePath.replace(/\.md$/, "");
-    lines.push(`- [${name}](./${file.relativePath})`);
+    lines.push(`- [${name}](./${modulesDir}/${file.relativePath})`);
   }
   return lines.join("\n");
 }

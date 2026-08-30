@@ -10,21 +10,24 @@ offline, no API key needed). Optionally, pass `--llm` to have Claude rewrite
 the generated README into clearer prose while staying grounded in the
 extracted code structure.
 
-Currently supports **Python**. The parser layer is pluggable
-(`src/types.ts` → `LanguageParser`), so support for other languages (e.g.
-JavaScript/TypeScript) can be added as a new parser registered in
-`src/parsers/registry.ts`.
+Currently supports **Python** and **JavaScript** (`.js`/`.jsx`/`.mjs`/`.cjs`,
+both ESM and CommonJS). The parser layer is pluggable (`src/types.ts` →
+`LanguageParser`), so support for other languages (e.g. TypeScript) can be
+added as a new parser registered in `src/parsers/registry.ts`.
 
 ## How it works
 
 1. **Scan** — walks the target project (respecting `.gitignore`) for source files.
-2. **Parse** — for Python, a small stdlib-only helper script
-   (`src/parsers/python/ast_dump.py`) uses the `ast` module to extract
-   modules, classes, functions, parameters, type annotations, decorators,
-   and docstrings as JSON.
+2. **Parse**:
+   - Python: a small stdlib-only helper script (`src/parsers/python/ast_dump.py`)
+     uses the `ast` module to extract modules, classes, functions, parameters,
+     type annotations, decorators, and docstrings as JSON.
+   - JavaScript: parsed in-process with `@babel/parser`, extracting top-level
+     functions, classes, `require`/`import` statements, and JSDoc comments
+     (including `@param`/`@returns` types).
 3. **Generate** — the structured data is rendered into:
    - `README.md` at the project root
-   - `docs/api/*.md`, one file per module, plus an `index.md`
+   - `docs/api/index.md` (an index) and `docs/api/modules/*.md` (one file per module)
 4. **Enhance (optional)** — with `--llm`, the static README draft and a
    structure summary are sent to Claude to produce more readable prose. If
    this step fails (e.g. no API key), the tool falls back to the static
@@ -94,6 +97,8 @@ src/
     python/
       ast_dump.py                # stdlib-only Python AST -> JSON extractor
       python-parser.ts           # Spawns ast_dump.py, normalizes its output
+    javascript/
+      js-parser.ts                # @babel/parser-based JS/JSX extractor
   generators/
     readme-generator.ts          # Static README from ProjectStructure
     api-doc-generator.ts         # Per-module API markdown + index

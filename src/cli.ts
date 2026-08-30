@@ -56,12 +56,13 @@ program
       if (!opts.readmeOnly) {
         const apiFiles = generateApiDocs(structure);
         const outDir = path.resolve(structure.rootDir, opts.out);
-        await mkdir(outDir, { recursive: true });
+        const modulesDir = "modules";
+        await mkdir(path.join(outDir, modulesDir), { recursive: true });
 
         for (const file of apiFiles) {
-          await writeFile(path.join(outDir, file.relativePath), file.content, "utf8");
+          await writeFile(path.join(outDir, modulesDir, file.relativePath), file.content, "utf8");
         }
-        await writeFile(path.join(outDir, "index.md"), generateApiIndex(apiFiles), "utf8");
+        await writeFile(path.join(outDir, "index.md"), generateApiIndex(apiFiles, modulesDir), "utf8");
 
         console.log(pc.green(`Wrote ${apiFiles.length} API doc file(s) to ${outDir}`));
       }

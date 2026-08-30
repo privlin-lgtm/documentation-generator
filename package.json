@@ -15,6 +15,9 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
+    "@babel/generator": "^8.0.0",
+    "@babel/parser": "^8.0.4",
+    "@babel/types": "^8.0.4",
     "commander": "^12.1.0",
     "fast-glob": "^3.3.2",
     "ignore": "^5.3.2",

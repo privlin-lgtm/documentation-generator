@@ -11,7 +11,7 @@ export async function scanProject(
   const parser = getParser(language);
   if (!parser) {
     throw new Error(
-      `No parser registered for language "${language}". Supported: python`
+      `No parser registered for language "${language}". Supported: python, javascript`
     );
   }
 

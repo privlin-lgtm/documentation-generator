@@ -2,11 +2,19 @@ import path from "node:path";
 import type { ProjectStructure } from "../types.js";
 import { renderSignature } from "./signature.js";
 
+const INSTALL_SNIPPETS: Record<string, string[]> = {
+  python: ["pip install -r requirements.txt"],
+  javascript: ["npm install"],
+};
+
+function isPackageEntryFile(filePath: string): boolean {
+  const base = path.basename(filePath);
+  return base === "__init__.py" || /^index\.(js|jsx|mjs|cjs)$/.test(base);
+}
+
 function findProjectDescription(structure: ProjectStructure): string | null {
-  const initModule = structure.modules.find((m) =>
-    m.filePath.endsWith(path.join("", "__init__.py"))
-  );
-  if (initModule?.docstring) return initModule.docstring.trim();
+  const entryModule = structure.modules.find((m) => isPackageEntryFile(m.filePath));
+  if (entryModule?.docstring) return entryModule.docstring.trim();
 
   const anyDocstring = structure.modules.find((m) => m.docstring)?.docstring;
   return anyDocstring ? anyDocstring.trim() : null;
@@ -21,7 +29,9 @@ function summarizePublicApi(structure: ProjectStructure, limit = 12): string[] {
     }
     for (const fn of mod.functions) {
       if (fn.name.startsWith("_")) continue;
-      entries.push(`\`${renderSignature(fn)}\` — ${fn.docstring?.split("\n")[0] ?? "function"}`);
+      entries.push(
+        `\`${renderSignature(fn, structure.language)}\` — ${fn.docstring?.split("\n")[0] ?? "function"}`
+      );
     }
   }
   return entries.slice(0, limit);
@@ -32,13 +42,14 @@ export function generateStaticReadme(structure: ProjectStructure): string {
   const projectName = path.basename(structure.rootDir);
   const description = findProjectDescription(structure);
   const apiHighlights = summarizePublicApi(structure);
+  const installLines = INSTALL_SNIPPETS[structure.language] ?? ["# TODO: add install instructions"];
 
   const lines: string[] = [];
   lines.push(`# ${projectName}`, "");
   lines.push(description ?? "_TODO: add a project description._", "");
 
   lines.push("## Installation", "");
-  lines.push("```bash", "pip install -r requirements.txt", "```", "");
+  lines.push("```bash", ...installLines, "```", "");
 
   lines.push("## Project Structure", "");
   lines.push("```");
