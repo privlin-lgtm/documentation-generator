@@ -7,6 +7,8 @@ import { emptyModule } from "../shared.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const AST_DUMP_TIMEOUT_MS = 60_000;
+/** A cold interpreter start on a slow machine or CI runner can take several seconds. */
+const PYTHON_PROBE_TIMEOUT_MS = 20_000;
 const AST_DUMP_MAX_STDOUT_BYTES = 50 * 1024 * 1024;
 
 const PYTHON_CANDIDATES =
@@ -23,19 +25,28 @@ function resolveAstDumpScript(): string {
 export function findPythonExecutable(): string {
   if (cachedPython) return cachedPython;
 
+  const timedOut: string[] = [];
   for (const cmd of PYTHON_CANDIDATES) {
     const probe = spawnSync(
       cmd,
       ["-c", "import sys; raise SystemExit(0 if sys.version_info >= (3,) else 1)"],
-      { encoding: "utf8", timeout: 5_000, windowsHide: true }
+      { encoding: "utf8", timeout: PYTHON_PROBE_TIMEOUT_MS, windowsHide: true }
     );
+    if ((probe.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT" || probe.signal) {
+      timedOut.push(cmd);
+      continue;
+    }
     if (probe.error || probe.status !== 0) continue;
     cachedPython = cmd;
     return cmd;
   }
 
+  const timeoutNote =
+    timedOut.length > 0
+      ? ` ${timedOut.join(", ")} timed out after ${PYTHON_PROBE_TIMEOUT_MS / 1000}s; Python may be slow to start.`
+      : "";
   throw new Error(
-    `Could not find a Python 3 interpreter. Tried: ${PYTHON_CANDIDATES.join(", ")}. Is Python 3 installed and on PATH?`
+    `Could not find a Python 3 interpreter. Tried: ${PYTHON_CANDIDATES.join(", ")}. Is Python 3 installed and on PATH?${timeoutNote}`
   );
 }
 
