@@ -12,10 +12,11 @@ offline, no API key needed). Optionally, pass `--llm` to have Claude rewrite
 the generated README into clearer prose while staying grounded in the
 extracted code structure.
 
-Currently supports **Python** and **JavaScript** (`.js`/`.jsx`/`.mjs`/`.cjs`,
-both ESM and CommonJS), including scanning **both in one run** for
-mixed-language repos. The parser layer is pluggable (`src/types.ts` →
-`LanguageParser`), so support for other languages (e.g. TypeScript) can be
+Currently supports **Python**, **JavaScript** (`.js`/`.jsx`/`.mjs`/`.cjs`,
+both ESM and CommonJS) and **TypeScript** (`.ts`/`.tsx`/`.mts`/`.cts`;
+`.d.ts` declaration files are skipped), including scanning **all of them in
+one run** for mixed-language repos. The parser layer is pluggable
+(`src/types.ts` → `LanguageParser`), so support for other languages can be
 added as a new parser registered in `src/parsers/registry.ts`.
 
 ## Example
@@ -152,6 +153,11 @@ it doesn't just paste the docstring text below a heading.
    - JavaScript: parsed in-process with `@babel/parser`, extracting top-level
      functions, classes, `require`/`import` statements, and JSDoc comments
      (including `@param`/`@returns` types).
+   - TypeScript: the same Babel pipeline with the `typescript` plugin, so real
+     parameter and return type annotations are used (falling back to JSDoc
+     types where a parameter has none), along with TSDoc/JSDoc comments,
+     `implements` clauses and constructor parameter properties. `private`
+     methods, overload signatures and `.d.ts` files are left out.
 3. **Generate** — the structured data is rendered into:
    - `README.md` at the project root
    - `docs/api/index.md` (an index) and `docs/api/modules/*.md` (one file per module)
@@ -214,6 +220,9 @@ node dist/cli.js generate ./my_python_project --lang python
 # Scan a mixed Python + JavaScript repo in one run
 node dist/cli.js generate ./my_fullstack_repo --lang python,javascript
 
+# Scan only TypeScript
+node dist/cli.js generate ./my_ts_project --lang typescript
+
 # With Claude-enhanced README prose
 ANTHROPIC_API_KEY=sk-... node dist/cli.js generate ./my_project --llm
 
@@ -256,6 +265,8 @@ src/
       python-parser.ts           # Spawns ast_dump.py, normalizes its output
     javascript/
       js-parser.ts                # @babel/parser-based JS/JSX extractor
+    typescript/
+      ts-parser.ts                # TS/TSX via the same Babel pipeline
   generators/
     readme-generator.ts          # Static README from ProjectStructure
     api-doc-generator.ts         # Per-module API markdown + index

@@ -6,11 +6,13 @@ import { renderSignature } from "./signature.js";
 const INSTALL_SNIPPETS: Record<string, string[]> = {
   python: ["pip install -r requirements.txt"],
   javascript: ["npm install"],
+  typescript: ["npm install"],
 };
 
 const LANGUAGE_DISPLAY_NAMES: Record<string, string> = {
   python: "Python",
   javascript: "JavaScript",
+  typescript: "TypeScript",
 };
 
 function displayName(language: string): string {
@@ -19,7 +21,7 @@ function displayName(language: string): string {
 
 function isPackageEntryFile(filePath: string): boolean {
   const base = path.basename(filePath);
-  return base === "__init__.py" || /^index\.(js|jsx|mjs|cjs)$/.test(base);
+  return base === "__init__.py" || /^index\.(js|jsx|mjs|cjs|ts|tsx|mts|cts)$/.test(base);
 }
 
 function findProjectDescription(structure: ProjectStructure): string | null {

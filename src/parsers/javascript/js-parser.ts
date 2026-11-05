@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { parse } from "@babel/parser";
+import { parse, type ParserPlugin } from "@babel/parser";
 import generate from "@babel/generator";
 import * as t from "@babel/types";
 import type {
@@ -16,8 +16,37 @@ import { emptyModule } from "../shared.js";
 // Only genuinely optional/legacy syntax needs to be listed explicitly.
 const PARSE_PLUGINS = ["jsx", "decorators-legacy", "exportDefaultFrom"] as const;
 
+/** Syntax flavor for {@link parseSource}. TypeScript files are parsed by the
+ * same Babel pipeline with the `typescript` plugin; `.tsx` additionally
+ * enables JSX (plain `.ts` must not, since `<T>expr` casts conflict with it). */
+export interface ParseOptions {
+  typescript?: boolean;
+  jsx?: boolean;
+}
+
+function parsePlugins(options: ParseOptions): ParserPlugin[] {
+  if (!options.typescript) return [...PARSE_PLUGINS];
+  const plugins: ParserPlugin[] = ["typescript", "decorators-legacy"];
+  if (options.jsx) plugins.push("jsx");
+  return plugins;
+}
+
 function code(node: t.Node): string {
   return generate(node, { compact: true }).code;
+}
+
+/** Renders `<A, B>` type arguments (printed per param: Babel's generator
+ * can't print a bare TSTypeParameterInstantiation outside its parent). */
+function typeArgs(node: t.Node | null | undefined): string {
+  if (!node || !("params" in node) || !Array.isArray(node.params)) return "";
+  return `<${node.params.map((p: t.Node) => typeCode(p)).join(", ")}>`;
+}
+
+/** Renders a TS type annotation readably (`string | number`, not `string|number`). */
+function typeCode(node: t.Node | null | undefined): string | null {
+  if (!node) return null;
+  const inner = t.isTSTypeAnnotation(node) ? node.typeAnnotation : node;
+  return generate(inner).code.replace(/\s*\n\s*/g, " ");
 }
 
 /** Strips the leading `*` gutter from each line of a JSDoc comment's raw value. */
@@ -110,21 +139,51 @@ function collectImports(program: t.Program): string[] {
   return imports;
 }
 
+/** A binding's name without its TS type annotation (`x?` keeps the optional marker). */
+function bindingName(node: t.Node): string {
+  if (t.isIdentifier(node)) return node.optional ? `${node.name}?` : node.name;
+  const annotated = node as t.Node & { typeAnnotation?: t.Node | null };
+  if (annotated.typeAnnotation) {
+    // Render the pattern itself without its annotation, without mutating the AST.
+    return code({ ...annotated, typeAnnotation: null } as t.Node);
+  }
+  return code(node);
+}
+
+function annotationOf(node: t.Node): string | null {
+  const annotated = node as t.Node & { typeAnnotation?: t.Node | null };
+  return typeCode(annotated.typeAnnotation);
+}
+
 function paramFromNode(node: t.Node): ParamInfo {
+  // TS constructor parameter properties (`constructor(private readonly x: T)`).
+  if (t.isTSParameterProperty(node)) {
+    const param = paramFromNode(node.parameter);
+    const modifiers = [
+      node.accessibility,
+      node.override ? "override" : null,
+      node.readonly ? "readonly" : null,
+    ].filter(Boolean);
+    return modifiers.length > 0
+      ? { ...param, name: `${modifiers.join(" ")} ${param.name}` }
+      : param;
+  }
   if (t.isIdentifier(node)) {
-    return { name: node.name, annotation: null, default: null };
+    return { name: bindingName(node), annotation: annotationOf(node), default: null };
   }
   if (t.isAssignmentPattern(node)) {
     const left = node.left;
-    const name = t.isIdentifier(left) ? left.name : code(left);
-    return { name, annotation: null, default: code(node.right) };
+    return { name: bindingName(left), annotation: annotationOf(left), default: code(node.right) };
   }
   if (t.isRestElement(node)) {
-    const argName = t.isIdentifier(node.argument) ? node.argument.name : code(node.argument);
-    return { name: `...${argName}`, annotation: null, default: null };
+    return {
+      name: `...${bindingName(node.argument)}`,
+      annotation: annotationOf(node) ?? annotationOf(node.argument),
+      default: null,
+    };
   }
   // Destructured (object/array) params: fall back to rendering the pattern as-is.
-  return { name: code(node), annotation: null, default: null };
+  return { name: bindingName(node), annotation: annotationOf(node), default: null };
 }
 
 /**
@@ -153,6 +212,8 @@ function applyJsDocTypes(
   if (typesByName.size === 0) return { params, returnType };
 
   const updatedParams = params.map((p) => {
+    // A real (TypeScript) annotation always wins over a JSDoc type.
+    if (p.annotation) return p;
     const type = typesByName.get(p.name) ?? typesByName.get(p.name.replace(/^\.\.\./, ""));
     return type ? { ...p, annotation: type } : p;
   });
@@ -162,7 +223,7 @@ function applyJsDocTypes(
 interface FunctionLike {
   params: t.Node[];
   async: boolean;
-  body: t.Node;
+  returnType?: t.Node | null;
 }
 
 function buildFunctionInfo(
@@ -173,12 +234,15 @@ function buildFunctionInfo(
   ...jsDocHosts: Array<t.Node | null | undefined>
 ): FunctionInfo {
   const docstring = getJsDoc(...jsDocHosts);
-  const { params, returnType } = applyJsDocTypes(docstring, fnNode.params.map(paramFromNode));
+  const { params, returnType: jsDocReturnType } = applyJsDocTypes(
+    docstring,
+    fnNode.params.map(paramFromNode)
+  );
 
   return {
     name,
     params,
-    returnType,
+    returnType: typeCode(fnNode.returnType) ?? jsDocReturnType,
     docstring,
     decorators,
     isAsync: fnNode.async,
@@ -196,7 +260,10 @@ function buildClassInfo(node: t.ClassDeclaration, jsDocHost: t.Node | null | und
   const methods: FunctionInfo[] = [];
 
   for (const member of node.body.body) {
+    // TS-only members are skipped: `private` methods (not public API) and
+    // abstract/overload signatures (TSDeclareMethod, not ClassMethod).
     if (!t.isClassMethod(member) && !t.isClassPrivateMethod(member)) continue;
+    if (t.isClassMethod(member) && member.accessibility === "private") continue;
     const name = t.isClassPrivateMethod(member)
       ? `#${(member.key as t.PrivateName).id.name}`
       : classMethodName(member.key as t.ClassMethod["key"]);
@@ -209,7 +276,10 @@ function buildClassInfo(node: t.ClassDeclaration, jsDocHost: t.Node | null | und
 
   return {
     name: node.id?.name ?? "(anonymous)",
-    bases: node.superClass ? [code(node.superClass)] : [],
+    bases: [
+      ...(node.superClass ? [code(node.superClass) + typeArgs(node.superTypeArguments)] : []),
+      ...(node.implements ?? []).map((i) => code(i)),
+    ],
     docstring: getJsDoc(node, jsDocHost),
     methods,
     lineNumber: node.loc?.start.line ?? 0,
@@ -225,10 +295,14 @@ function unwrapExport(stmt: t.Statement): t.Statement | null {
   return stmt;
 }
 
-function parseSource(source: string, filePath: string): ModuleInfo {
+export function parseSource(
+  source: string,
+  filePath: string,
+  options: ParseOptions = {}
+): ModuleInfo {
   const ast = parse(source, {
-    sourceType: "unambiguous",
-    plugins: [...PARSE_PLUGINS],
+    sourceType: options.typescript ? "module" : "unambiguous",
+    plugins: parsePlugins(options),
     errorRecovery: true,
   });
 

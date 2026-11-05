@@ -2,8 +2,8 @@ import path from "node:path";
 import type { ClassInfo, FunctionInfo, ModuleInfo, ProjectStructure } from "../types.js";
 import { renderSignature } from "./signature.js";
 
-const SOURCE_EXTENSIONS = /\.(py|jsx?|mjs|cjs)$/;
-/** Files whose module acts as a package's public surface (Python's __init__.py, JS's index.js). */
+const SOURCE_EXTENSIONS = /\.(py|jsx?|mjs|cjs|tsx?|mts|cts)$/;
+/** Files whose module acts as a package's public surface (Python's __init__.py, JS/TS's index.js / index.ts). */
 const PACKAGE_ENTRY_STEM = /\.(__init__|index)$/;
 
 function toModuleDottedName(rootDir: string, filePath: string): string {

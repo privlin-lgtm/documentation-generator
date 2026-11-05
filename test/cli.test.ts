@@ -154,6 +154,60 @@ describe("docgen generate (CLI)", () => {
     }
   );
 
+  it.skipIf(!pythonAvailable())(
+    "scans JavaScript, TypeScript and Python together with --lang auto",
+    async () => {
+      vi.spyOn(console, "log").mockImplementation(() => {});
+      await withTempDir(
+        {
+          "app.py": 'def add(a: int, b: int) -> int:\n    """Adds."""\n    return a + b\n',
+          "index.js": "export function render() { return 'ok'; }\n",
+          "index.ts": [
+            "/**",
+            " * Typed inventory API.",
+            " */",
+            "/** Tracks stock. */",
+            "export class Stock {",
+            "  /** Adds stock. */",
+            "  add(sku: string, qty: number = 1): void {}",
+            "}",
+            "",
+            "/** Looks up a SKU. */",
+            "export async function find(sku: string): Promise<Stock | null> {",
+            "  return null;",
+            "}",
+            "",
+          ].join("\n"),
+          "globals.d.ts": "declare function hidden(): void;\n",
+        },
+        async (dir) => {
+          await run(["generate", dir, "--lang", "auto"]);
+
+          const readme = await readFile(path.join(dir, "README.md"), "utf8");
+          expect(readme).toContain("Typed inventory API.");
+          expect(readme).toContain("### TypeScript");
+          expect(readme).toContain("async function find(sku: string): Promise<Stock | null>");
+          expect(readme).toContain("def add(");
+          expect(readme).toContain("function render()");
+          expect(readme).not.toContain("globals.d.ts");
+
+          const tsDoc = await readFile(
+            path.join(dir, "docs/api/modules/typescript/index.md"),
+            "utf8"
+          );
+          expect(tsDoc).toContain("class `Stock`");
+          expect(tsDoc).toContain("`add(sku: string, qty: number = 1): void`");
+          expect(tsDoc).toContain("Looks up a SKU.");
+
+          const apiIndex = await readFile(path.join(dir, "docs/api/index.md"), "utf8");
+          expect(apiIndex).toContain("[typescript/index](./modules/typescript/index.md)");
+          expect(apiIndex).toContain("[javascript/index](./modules/javascript/index.md)");
+          expect(apiIndex).toContain("[python/app](./modules/python/app.md)");
+        }
+      );
+    }
+  );
+
   it("reports an error and exits 1 for an unsupported language", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "log").mockImplementation(() => {});
