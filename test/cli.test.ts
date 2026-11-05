@@ -5,6 +5,9 @@ import { createProgram } from "../src/cli.js";
 import { findPythonExecutable } from "../src/parsers/python/python-parser.js";
 import { withTempDir } from "./helpers.js";
 
+// A cold Python start can blow past vitest's 5 s default on a slow CI runner.
+const PYTHON_TEST_TIMEOUT_MS = 30_000;
+
 function pythonAvailable(): boolean {
   try {
     findPythonExecutable();
@@ -151,7 +154,8 @@ describe("docgen generate (CLI)", () => {
           expect(jsDoc).toContain("function render()");
         }
       );
-    }
+    },
+    PYTHON_TEST_TIMEOUT_MS
   );
 
   it.skipIf(!pythonAvailable())(
@@ -205,7 +209,8 @@ describe("docgen generate (CLI)", () => {
           expect(apiIndex).toContain("[python/app](./modules/python/app.md)");
         }
       );
-    }
+    },
+    PYTHON_TEST_TIMEOUT_MS
   );
 
   it("reports an error and exits 1 for an unsupported language", async () => {
