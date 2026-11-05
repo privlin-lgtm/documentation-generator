@@ -78,10 +78,87 @@ describe("generateStaticReadme", () => {
     expect(readme).toContain("function render(): string");
   });
 
-  it("falls back to a TODO description and install snippet with no modules", () => {
+  it("omits the description and install section when nothing is known (no modules)", () => {
     const structure: ProjectStructure = { rootDir: "/project/empty", languages: [], modules: [] };
     const readme = generateStaticReadme(structure);
-    expect(readme).toContain("TODO: add a project description");
-    expect(readme).toContain("TODO: add install instructions");
+    expect(readme).not.toMatch(/todo/i);
+    expect(readme).not.toContain("## Installation");
+    expect(readme).not.toContain("## Project Structure");
+    expect(readme.startsWith("# empty\n\n## Documentation")).toBe(true);
+  });
+
+  it("omits the install snippet for a language with no known steps", () => {
+    const structure: ProjectStructure = {
+      rootDir: "/project/polyglot",
+      languages: ["python", "cobol"],
+      modules: [
+        makeModule({ filePath: "/project/polyglot/app.py", language: "python" }),
+        makeModule({ filePath: "/project/polyglot/main.cbl", language: "cobol" }),
+      ],
+    };
+    const readme = generateStaticReadme(structure);
+    expect(readme).not.toMatch(/todo/i);
+    expect(readme).toContain("pip install -r requirements.txt");
+    // Only one language has steps, so no per-language subsection headers.
+    expect(readme).not.toContain("### Python");
+    expect(readme).not.toContain("### Cobol");
+  });
+
+  it("omits the whole install section when no scanned language has known steps", () => {
+    const structure: ProjectStructure = {
+      rootDir: "/project/legacy",
+      languages: ["cobol"],
+      modules: [makeModule({ filePath: "/project/legacy/main.cbl", language: "cobol" })],
+    };
+    const readme = generateStaticReadme(structure);
+    expect(readme).not.toMatch(/todo/i);
+    expect(readme).not.toContain("## Installation");
+  });
+
+  it("uses the manifest description when no docstring is found", () => {
+    const structure: ProjectStructure = {
+      rootDir: "/project/tool",
+      languages: ["javascript"],
+      modules: [makeModule({ filePath: "/project/tool/index.js", language: "javascript" })],
+    };
+    const readme = generateStaticReadme(structure, {
+      description: "A handy tool.",
+      installSteps: {},
+    });
+    expect(readme).toContain("# tool\n\nA handy tool.\n");
+  });
+
+  it("prefers a docstring over the manifest description", () => {
+    const structure: ProjectStructure = {
+      rootDir: "/project/tool",
+      languages: ["javascript"],
+      modules: [
+        makeModule({
+          filePath: "/project/tool/index.js",
+          language: "javascript",
+          docstring: "From the code.",
+        }),
+      ],
+    };
+    const readme = generateStaticReadme(structure, {
+      description: "From package.json.",
+      installSteps: {},
+    });
+    expect(readme).toContain("From the code.");
+    expect(readme).not.toContain("From package.json.");
+  });
+
+  it("prefers detected install steps over the language default", () => {
+    const structure: ProjectStructure = {
+      rootDir: "/project/lib",
+      languages: ["python"],
+      modules: [makeModule({ filePath: "/project/lib/lib.py", language: "python" })],
+    };
+    const readme = generateStaticReadme(structure, {
+      description: null,
+      installSteps: { python: ["pip install ."] },
+    });
+    expect(readme).toContain("pip install .");
+    expect(readme).not.toContain("requirements.txt");
   });
 });
