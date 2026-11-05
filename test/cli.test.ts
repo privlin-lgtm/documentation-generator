@@ -62,6 +62,24 @@ describe("docgen generate (CLI)", () => {
     );
   });
 
+  it("uses package.json for the description when the code has no docstring", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await withTempDir(
+      {
+        "package.json": JSON.stringify({ name: "demo", description: "Demo from package.json." }),
+        "index.js": "export function add(a, b) {\n  return a + b;\n}\n",
+      },
+      async (dir) => {
+        await run(["generate", dir, "--lang", "javascript"]);
+
+        const readme = await readFile(path.join(dir, "README.md"), "utf8");
+        expect(readme).toContain("Demo from package.json.");
+        expect(readme).toContain("npm install");
+        expect(readme).not.toMatch(/todo/i);
+      }
+    );
+  });
+
   it("rejects --readme-only combined with --api-only and writes nothing", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     await withTempDir({ "a.js": "export function f() {}\n" }, async (dir) => {

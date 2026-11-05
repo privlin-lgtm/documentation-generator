@@ -1,4 +1,5 @@
 import path from "node:path";
+import { EMPTY_PROJECT_METADATA, type ProjectMetadata } from "../core/project-metadata.js";
 import type { ProjectStructure } from "../types.js";
 import { renderSignature } from "./signature.js";
 
@@ -49,22 +50,27 @@ function summarizePublicApi(structure: ProjectStructure, limit = 12): string[] {
 }
 
 /**
- * Renders the Installation section. A single-language project gets one plain
- * snippet; a mixed-language scan gets one labeled subsection per language so
- * neither install step is lost or implied to be the other's replacement.
+ * Renders the Installation section. Steps detected from the project's own
+ * files win over the per-language defaults in INSTALL_SNIPPETS; a language
+ * with neither is left out, and the whole section is omitted when no language
+ * has known steps. A single-language project gets one plain snippet; a
+ * mixed-language scan gets one labeled subsection per language so neither
+ * install step is lost or implied to be the other's replacement.
  */
-function renderInstallSection(structure: ProjectStructure): string[] {
+function renderInstallSection(structure: ProjectStructure, metadata: ProjectMetadata): string[] {
   const languagesPresent = [...new Set(structure.modules.map((m) => m.language))];
+  const snippets = languagesPresent
+    .map((language) => ({
+      language,
+      snippet: metadata.installSteps[language] ?? INSTALL_SNIPPETS[language],
+    }))
+    .filter((entry): entry is { language: string; snippet: string[] } => !!entry.snippet?.length);
+
+  if (snippets.length === 0) return [];
+
   const lines = ["## Installation", ""];
-
-  if (languagesPresent.length === 0) {
-    lines.push("```bash", "# TODO: add install instructions", "```", "");
-    return lines;
-  }
-
-  for (const language of languagesPresent) {
-    const snippet = INSTALL_SNIPPETS[language] ?? ["# TODO: add install instructions"];
-    if (languagesPresent.length > 1) {
+  for (const { language, snippet } of snippets) {
+    if (snippets.length > 1) {
       lines.push(`### ${displayName(language)}`, "");
     }
     lines.push("```bash", ...snippet, "```", "");
@@ -72,24 +78,36 @@ function renderInstallSection(structure: ProjectStructure): string[] {
   return lines;
 }
 
-/** Builds a static README purely from extracted code structure (no LLM). */
-export function generateStaticReadme(structure: ProjectStructure): string {
+/**
+ * Builds a static README from extracted code structure (no LLM). `metadata`
+ * carries facts read from the project's manifest files (see
+ * readProjectMetadata); without it, only the code structure is used.
+ * Sections the generator has nothing real to say about are omitted.
+ */
+export function generateStaticReadme(
+  structure: ProjectStructure,
+  metadata: ProjectMetadata = EMPTY_PROJECT_METADATA
+): string {
   const projectName = path.basename(structure.rootDir);
-  const description = findProjectDescription(structure);
+  const description = findProjectDescription(structure) ?? metadata.description;
   const apiHighlights = summarizePublicApi(structure);
 
   const lines: string[] = [];
   lines.push(`# ${projectName}`, "");
-  lines.push(description ?? "_TODO: add a project description._", "");
-
-  lines.push(...renderInstallSection(structure));
-
-  lines.push("## Project Structure", "");
-  lines.push("```");
-  for (const mod of structure.modules) {
-    lines.push(path.relative(structure.rootDir, mod.filePath).replace(/\\/g, "/"));
+  if (description) {
+    lines.push(description, "");
   }
-  lines.push("```", "");
+
+  lines.push(...renderInstallSection(structure, metadata));
+
+  if (structure.modules.length > 0) {
+    lines.push("## Project Structure", "");
+    lines.push("```");
+    for (const mod of structure.modules) {
+      lines.push(path.relative(structure.rootDir, mod.filePath).replace(/\\/g, "/"));
+    }
+    lines.push("```", "");
+  }
 
   if (apiHighlights.length > 0) {
     lines.push("## Highlights", "");
