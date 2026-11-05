@@ -5,6 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import pc from "picocolors";
 import { scanProject } from "./core/project-scanner.js";
+import { readProjectMetadata } from "./core/project-metadata.js";
 import { generateStaticReadme } from "./generators/readme-generator.js";
 import { generateApiDocs, generateApiIndex } from "./generators/api-doc-generator.js";
 import { ClaudeReadmeEnhancer } from "./enhancers/claude-enhancer.js";
@@ -79,7 +80,8 @@ export function createProgram(): Command {
         const writes: PlannedWrite[] = [];
 
         if (!opts.apiOnly) {
-          let readme = generateStaticReadme(structure);
+          const metadata = await readProjectMetadata(structure.rootDir);
+          let readme = generateStaticReadme(structure, metadata);
 
           if (opts.llm) {
             try {
