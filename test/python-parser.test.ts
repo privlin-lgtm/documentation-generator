@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { findPythonExecutable, pythonParser } from "../src/parsers/python/python-parser.js";
 import { withTempDir } from "./helpers.js";
 
+// A cold Python start can blow past vitest's 5 s default on a slow CI runner.
+const PYTHON_TEST_TIMEOUT_MS = 30_000;
+const PYTHON_PROBE_TIMEOUT_MS = 20_000;
+
 function pythonAvailable(): boolean {
   try {
     findPythonExecutable();
@@ -34,7 +38,7 @@ def clamp(value: int, /, low: int = 0, *, high: int = 100) -> int:
     return max(low, min(value, high))
 `;
 
-describe.skipIf(!pythonAvailable())("pythonParser", () => {
+describe.skipIf(!pythonAvailable())("pythonParser", { timeout: PYTHON_TEST_TIMEOUT_MS }, () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -99,7 +103,7 @@ describe.skipIf(!pythonAvailable())("pythonParser", () => {
     const probe = spawnSync(
       python,
       ["-c", "import sys; raise SystemExit(0 if sys.version_info >= (3,) else 1)"],
-      { encoding: "utf8", timeout: 5_000, windowsHide: true }
+      { encoding: "utf8", timeout: PYTHON_PROBE_TIMEOUT_MS, windowsHide: true }
     );
     expect(probe.error).toBeUndefined();
     expect(probe.status).toBe(0);
