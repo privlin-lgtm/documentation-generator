@@ -53,25 +53,39 @@ function summarizePublicApi(structure: ProjectStructure, limit = 12): string[] {
  * Renders the Installation section. Steps detected from the project's own
  * files win over the per-language defaults in INSTALL_SNIPPETS; a language
  * with neither is left out, and the whole section is omitted when no language
- * has known steps. A single-language project gets one plain snippet; a
- * mixed-language scan gets one labeled subsection per language so neither
- * install step is lost or implied to be the other's replacement.
+ * has known steps. Languages whose step lists are identical share one block
+ * (e.g. JavaScript and TypeScript both using `npm install`), so the same
+ * command is never repeated. When only one block remains it is rendered plain;
+ * otherwise each block gets a subheading naming its languages, joined with
+ * " / " in order of first appearance, so no install step is lost or implied to
+ * be another's replacement.
  */
 function renderInstallSection(structure: ProjectStructure, metadata: ProjectMetadata): string[] {
   const languagesPresent = [...new Set(structure.modules.map((m) => m.language))];
-  const snippets = languagesPresent
-    .map((language) => ({
-      language,
-      snippet: metadata.installSteps[language] ?? INSTALL_SNIPPETS[language],
-    }))
-    .filter((entry): entry is { language: string; snippet: string[] } => !!entry.snippet?.length);
+  const groups: { languages: string[]; snippet: string[] }[] = [];
+  const groupsByKey = new Map<string, { languages: string[]; snippet: string[] }>();
 
-  if (snippets.length === 0) return [];
+  for (const language of languagesPresent) {
+    const snippet = metadata.installSteps[language] ?? INSTALL_SNIPPETS[language];
+    if (!snippet?.length) continue;
+
+    const key = JSON.stringify(snippet);
+    const existing = groupsByKey.get(key);
+    if (existing) {
+      existing.languages.push(language);
+    } else {
+      const group = { languages: [language], snippet };
+      groupsByKey.set(key, group);
+      groups.push(group);
+    }
+  }
+
+  if (groups.length === 0) return [];
 
   const lines = ["## Installation", ""];
-  for (const { language, snippet } of snippets) {
-    if (snippets.length > 1) {
-      lines.push(`### ${displayName(language)}`, "");
+  for (const { languages, snippet } of groups) {
+    if (groups.length > 1) {
+      lines.push(`### ${languages.map(displayName).join(" / ")}`, "");
     }
     lines.push("```bash", ...snippet, "```", "");
   }
