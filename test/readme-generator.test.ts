@@ -161,4 +161,76 @@ describe("generateStaticReadme", () => {
     expect(readme).toContain("pip install .");
     expect(readme).not.toContain("requirements.txt");
   });
+
+  it("merges JavaScript and TypeScript into one plain block when their steps match", () => {
+    const structure: ProjectStructure = {
+      rootDir: "/project/web",
+      languages: ["javascript", "typescript"],
+      modules: [
+        makeModule({ filePath: "/project/web/legacy.js", language: "javascript" }),
+        makeModule({ filePath: "/project/web/index.ts", language: "typescript" }),
+      ],
+    };
+
+    const readme = generateStaticReadme(structure);
+    expect(readme).toContain("## Installation\n\n```bash\nnpm install\n```\n");
+    expect(readme.match(/npm install/g)).toHaveLength(1);
+    expect(readme).not.toMatch(/^### /m);
+  });
+
+  it("gives one subheading per group when JS and TS share steps alongside Python", () => {
+    const structure: ProjectStructure = {
+      rootDir: "/project/full-stack",
+      languages: ["javascript", "python", "typescript"],
+      modules: [
+        makeModule({ filePath: "/project/full-stack/web/index.js", language: "javascript" }),
+        makeModule({ filePath: "/project/full-stack/api/app.py", language: "python" }),
+        makeModule({ filePath: "/project/full-stack/web/types.ts", language: "typescript" }),
+      ],
+    };
+
+    const readme = generateStaticReadme(structure);
+    const install = readme.slice(
+      readme.indexOf("## Installation"),
+      readme.indexOf("## Project Structure")
+    );
+    expect(install).toBe(
+      [
+        "## Installation",
+        "",
+        "### JavaScript / TypeScript",
+        "",
+        "```bash",
+        "npm install",
+        "```",
+        "",
+        "### Python",
+        "",
+        "```bash",
+        "pip install -r requirements.txt",
+        "```",
+        "",
+        "",
+      ].join("\n")
+    );
+  });
+
+  it("keeps JavaScript and TypeScript separate when detected steps differ", () => {
+    const structure: ProjectStructure = {
+      rootDir: "/project/web",
+      languages: ["javascript", "typescript"],
+      modules: [
+        makeModule({ filePath: "/project/web/legacy.js", language: "javascript" }),
+        makeModule({ filePath: "/project/web/index.ts", language: "typescript" }),
+      ],
+    };
+
+    const readme = generateStaticReadme(structure, {
+      description: null,
+      installSteps: { typescript: ["npm install", "npm run build"] },
+    });
+    expect(readme).toContain("### JavaScript\n\n```bash\nnpm install\n```");
+    expect(readme).toContain("### TypeScript\n\n```bash\nnpm install\nnpm run build\n```");
+    expect(readme).not.toContain("JavaScript / TypeScript");
+  });
 });

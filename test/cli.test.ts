@@ -189,7 +189,8 @@ describe("docgen generate (CLI)", () => {
 
           const readme = await readFile(path.join(dir, "README.md"), "utf8");
           expect(readme).toContain("Typed inventory API.");
-          expect(readme).toContain("### TypeScript");
+          expect(readme).toContain("### JavaScript / TypeScript");
+          expect(readme.match(/npm install/g)).toHaveLength(1);
           expect(readme).toContain("async function find(sku: string): Promise<Stock | null>");
           expect(readme).toContain("def add(");
           expect(readme).toContain("function render()");
