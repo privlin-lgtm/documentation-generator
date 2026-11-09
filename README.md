@@ -168,10 +168,15 @@ it doesn't just paste the docstring text below a heading.
 
 Scanning more than one language in a single run merges everything into one
 `README.md` (with a labeled install section per language, where languages
-with identical install steps, such as JavaScript and TypeScript, share one)
-and namespaces API doc filenames by language only when needed to avoid
-collisions (e.g. a Python `utils.py` and a JS `utils.js` both existing in the
-same repo).
+with identical install steps, such as JavaScript and TypeScript, share one,
+and the language with the most modules comes first) and namespaces API doc
+filenames by language only when needed to avoid collisions (e.g. a Python
+`utils.py` and a JS `utils.js` both existing in the same repo).
+
+The JavaScript / TypeScript install command follows the project's package
+manager: the `packageManager` field in `package.json` if set, otherwise the
+root lockfile (`pnpm-lock.yaml`, then `yarn.lock`, then `bun.lockb` or
+`bun.lock`, then `package-lock.json`), otherwise `npm install`.
 
 ## Requirements
 
