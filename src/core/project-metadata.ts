@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 
 /**
@@ -22,6 +22,62 @@ async function readOptional(filePath: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+async function exists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
+
+const PACKAGE_MANAGERS: readonly PackageManager[] = ["npm", "pnpm", "yarn", "bun"];
+
+/**
+ * Root lockfiles and the package manager each one implies. The order is the
+ * precedence used when a repo has more than one lockfile: pnpm, then yarn,
+ * then bun, then npm. A stray package-lock.json usually comes from someone
+ * running `npm install` by accident in a pnpm/yarn/bun repo, so npm's lockfile
+ * loses to any other; the order among the rest is arbitrary but fixed.
+ */
+const LOCKFILES: readonly [string, PackageManager][] = [
+  ["pnpm-lock.yaml", "pnpm"],
+  ["yarn.lock", "yarn"],
+  ["bun.lockb", "bun"],
+  ["bun.lock", "bun"],
+  ["package-lock.json", "npm"],
+];
+
+/** Reads the tool name from package.json's `packageManager` field (e.g. "pnpm@9.1.0"). */
+function packageJsonPackageManager(raw: string): PackageManager | null {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && "packageManager" in parsed) {
+      const value = (parsed as { packageManager: unknown }).packageManager;
+      if (typeof value !== "string") return null;
+      const name = value.trim().split("@")[0];
+      return PACKAGE_MANAGERS.find((pm) => pm === name) ?? null;
+    }
+  } catch {
+    // Malformed package.json: fall back to lockfiles.
+  }
+  return null;
+}
+
+/**
+ * Picks the project's JS package manager: package.json's `packageManager`
+ * field wins, then root lockfiles in LOCKFILES order, then npm.
+ */
+async function detectPackageManager(rootDir: string, packageJson: string): Promise<PackageManager> {
+  const declared = packageJsonPackageManager(packageJson);
+  if (declared) return declared;
+  const present = await Promise.all(LOCKFILES.map(([name]) => exists(path.join(rootDir, name))));
+  const index = present.indexOf(true);
+  return index === -1 ? "npm" : LOCKFILES[index][1];
 }
 
 function nonEmpty(value: unknown): string | null {
@@ -80,7 +136,11 @@ export async function readProjectMetadata(rootDir: string): Promise<ProjectMetad
 
   const installSteps: Record<string, string[]> = {};
   if (packageJson !== null) {
-    installSteps.javascript = ["npm install"];
+    // JavaScript and TypeScript share one toolchain, so they get the same
+    // steps (and the README renders them as one block).
+    const steps = [`${await detectPackageManager(rootDir, packageJson)} install`];
+    installSteps.javascript = steps;
+    installSteps.typescript = [...steps];
   }
   if (requirements !== null) {
     installSteps.python = ["pip install -r requirements.txt"];

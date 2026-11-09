@@ -214,6 +214,54 @@ describe("docgen generate (CLI)", () => {
     PYTHON_TEST_TIMEOUT_MS
   );
 
+  it.skipIf(!pythonAvailable())(
+    "uses the detected package manager and leads with the main language",
+    async () => {
+      vi.spyOn(console, "log").mockImplementation(() => {});
+      await withTempDir(
+        {
+          "package.json": JSON.stringify({ name: "shop" }),
+          "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+          "requirements.txt": "requests\n",
+          "seed.py": 'def seed() -> None:\n    """Seeds data."""\n',
+          "index.js": "export function render() { return 'ok'; }\n",
+          "cart.ts": "export function total(prices: number[]): number { return 0; }\n",
+          "api.ts": "export function fetchCart(id: string): void {}\n",
+        },
+        async (dir) => {
+          await run(["generate", dir, "--lang", "auto"]);
+
+          const readme = await readFile(path.join(dir, "README.md"), "utf8");
+          const install = readme.slice(
+            readme.indexOf("## Installation"),
+            readme.indexOf("## Project Structure")
+          );
+          expect(install).toBe(
+            [
+              "## Installation",
+              "",
+              "### JavaScript / TypeScript",
+              "",
+              "```bash",
+              "pnpm install",
+              "```",
+              "",
+              "### Python",
+              "",
+              "```bash",
+              "pip install -r requirements.txt",
+              "```",
+              "",
+              "",
+            ].join("\n")
+          );
+          expect(readme).not.toMatch(/^npm install$/m);
+        }
+      );
+    },
+    PYTHON_TEST_TIMEOUT_MS
+  );
+
   it("reports an error and exits 1 for an unsupported language", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "log").mockImplementation(() => {});

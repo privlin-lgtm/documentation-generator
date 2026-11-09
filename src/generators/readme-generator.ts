@@ -58,29 +58,40 @@ function summarizePublicApi(structure: ProjectStructure, limit = 12): string[] {
  * command is never repeated. When only one block remains it is rendered plain;
  * otherwise each block gets a subheading naming its languages, joined with
  * " / " in order of first appearance, so no install step is lost or implied to
- * be another's replacement.
+ * be another's replacement. Blocks are ordered by how many scanned modules
+ * their languages cover (most first, so the project's main language leads),
+ * with ties broken by first appearance.
  */
 function renderInstallSection(structure: ProjectStructure, metadata: ProjectMetadata): string[] {
-  const languagesPresent = [...new Set(structure.modules.map((m) => m.language))];
-  const groups: { languages: string[]; snippet: string[] }[] = [];
-  const groupsByKey = new Map<string, { languages: string[]; snippet: string[] }>();
+  const moduleCounts = new Map<string, number>();
+  for (const { language } of structure.modules) {
+    moduleCounts.set(language, (moduleCounts.get(language) ?? 0) + 1);
+  }
+  const languagesPresent = [...moduleCounts.keys()];
+  const groups: { languages: string[]; snippet: string[]; moduleCount: number }[] = [];
+  const groupsByKey = new Map<string, (typeof groups)[number]>();
 
   for (const language of languagesPresent) {
     const snippet = metadata.installSteps[language] ?? INSTALL_SNIPPETS[language];
     if (!snippet?.length) continue;
 
     const key = JSON.stringify(snippet);
+    const count = moduleCounts.get(language) ?? 0;
     const existing = groupsByKey.get(key);
     if (existing) {
       existing.languages.push(language);
+      existing.moduleCount += count;
     } else {
-      const group = { languages: [language], snippet };
+      const group = { languages: [language], snippet, moduleCount: count };
       groupsByKey.set(key, group);
       groups.push(group);
     }
   }
 
   if (groups.length === 0) return [];
+  // Main language first: most modules wins. Array.prototype.sort is stable,
+  // so ties keep their order of first appearance.
+  groups.sort((a, b) => b.moduleCount - a.moduleCount);
 
   const lines = ["## Installation", ""];
   for (const { languages, snippet } of groups) {

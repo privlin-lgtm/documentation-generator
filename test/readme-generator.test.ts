@@ -233,4 +233,56 @@ describe("generateStaticReadme", () => {
     expect(readme).toContain("### TypeScript\n\n```bash\nnpm install\nnpm run build\n```");
     expect(readme).not.toContain("JavaScript / TypeScript");
   });
+
+  it("puts the language with the most modules first in a mixed repo", () => {
+    const structure: ProjectStructure = {
+      rootDir: "/project/mostly-js",
+      languages: ["python", "javascript", "typescript"],
+      modules: [
+        makeModule({ filePath: "/project/mostly-js/scripts/seed.py", language: "python" }),
+        makeModule({ filePath: "/project/mostly-js/web/index.js", language: "javascript" }),
+        makeModule({ filePath: "/project/mostly-js/web/app.ts", language: "typescript" }),
+        makeModule({ filePath: "/project/mostly-js/web/api.ts", language: "typescript" }),
+      ],
+    };
+
+    const readme = generateStaticReadme(structure, {
+      description: null,
+      installSteps: { javascript: ["pnpm install"], typescript: ["pnpm install"] },
+    });
+    const jsIndex = readme.indexOf("### JavaScript / TypeScript");
+    const pyIndex = readme.indexOf("### Python");
+    expect(jsIndex).toBeGreaterThan(-1);
+    expect(pyIndex).toBeGreaterThan(jsIndex);
+    expect(readme).toContain("### JavaScript / TypeScript\n\n```bash\npnpm install\n```");
+  });
+
+  it("puts a larger Python group above a smaller JavaScript one", () => {
+    const structure: ProjectStructure = {
+      rootDir: "/project/mostly-py",
+      languages: ["javascript", "python"],
+      modules: [
+        makeModule({ filePath: "/project/mostly-py/web/index.js", language: "javascript" }),
+        makeModule({ filePath: "/project/mostly-py/a.py", language: "python" }),
+        makeModule({ filePath: "/project/mostly-py/b.py", language: "python" }),
+      ],
+    };
+
+    const readme = generateStaticReadme(structure);
+    expect(readme.indexOf("### Python")).toBeLessThan(readme.indexOf("### JavaScript"));
+  });
+
+  it("keeps first-appearance order when module counts tie", () => {
+    const structure: ProjectStructure = {
+      rootDir: "/project/even",
+      languages: ["python", "javascript"],
+      modules: [
+        makeModule({ filePath: "/project/even/app.py", language: "python" }),
+        makeModule({ filePath: "/project/even/index.js", language: "javascript" }),
+      ],
+    };
+
+    const readme = generateStaticReadme(structure);
+    expect(readme.indexOf("### Python")).toBeLessThan(readme.indexOf("### JavaScript"));
+  });
 });
